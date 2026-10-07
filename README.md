@@ -307,9 +307,11 @@ dotnet build -c Release
 
 ## 致谢
 
-机制调研参考了以下公开项目与文档（仅参考思路，本仓库为独立实现）：
+参考了以下公开项目与文档（仅参考思路，本仓库为独立实现）：
 
 - [HugoWidget/HugoProgs](https://github.com/HugoWidget/HugoProgs)、[HugoDlls](https://github.com/HugoWidget/HugoDlls) —— 希沃功能增强工具集（锁屏窗口判据、IFEO 禁用思路）
 - [HugoAura](https://github.com/HugoAura/Seewo-HugoAura) —— 希沃管家插件注入方案
 - [eClassKiller/ECTools](https://github.com/eClassKiller/ECTools) —— 多种电子教室的限制解除
 - [希沃集控帮助文档](https://help.seewo.com/hugo/seUwokPXWT) —— 锁屏指令与解锁方式说明
+
+**本项目主要人类负责人因为学业问题没有进行部分功能的测试(如:集控锁屏时停止"SeewoServiceAssistant.exe")，感谢在此期间帮忙测试并发现漏洞的人[@LeisurelYun](https://github.com/LeisurelYun)**
