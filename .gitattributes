@@ -1,0 +1,11 @@
+# 统一换行符：源码与文档用 LF；PowerShell / 批处理用 CRLF（Windows PowerShell 5.1 更省心）
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# 二进制文件不做转换
+*.exe binary
+*.dll binary
+*.ico binary
+*.png binary

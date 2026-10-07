@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>FakeLockWindow</AssemblyName>
+    <RootNamespace>FakeLockWindow</RootNamespace>
+    <Version>1.0.0</Version>
+    <Description>造一个"像希沃管家锁屏"的窗口，用来验证 SeeowKiller 的锁屏识别</Description>
+    <!-- 离线还原：和主项目一样钉住已安装的 targeting pack -->
+    <TargetLatestRuntimePatch>false</TargetLatestRuntimePatch>
+    <RuntimeFrameworkVersion>8.0.29</RuntimeFrameworkVersion>
+  </PropertyGroup>
+
+</Project>

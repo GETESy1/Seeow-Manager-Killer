@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>SeeowKiller</AssemblyName>
+    <RootNamespace>SeeowKiller</RootNamespace>
+    <Version>1.0.0</Version>
+    <Product>SeeowKiller</Product>
+    <Description>登录/开机即结束希沃管家进程（SeewoServiceAssistant.exe）的看门狗</Description>
+    <DebugType>embedded</DebugType>
+
+    <!-- 本机离线时的版本钉死：使用已安装的 targeting pack 8.0.29，避免 restore 去访问 nuget.org -->
+    <TargetLatestRuntimePatch>false</TargetLatestRuntimePatch>
+    <RuntimeFrameworkVersion>8.0.29</RuntimeFrameworkVersion>
+  </PropertyGroup>
+
+  <!--
+    注意：不要给这个项目加自定义 app.manifest。
+    .NET 的 apphost 自己会写入 manifest，再叠加一份会触发
+    "side-by-side configuration is incorrect"（0x36B1）导致 exe 起不来。
+    默认 manifest 已经包含 asInvoker + Win10 兼容声明，够用；
+    需要提权时程序自己用 runas 重新拉起自己。
+  -->
+
+  <!--
+    发布命令（本机离线可直接用第一条；第二条需要联网拉 runtime pack）：
+      dotnet publish -c Release
+          -> 框架依赖，体积小，目标机需装 .NET 8 Desktop Runtime
+      dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true -p:SelfContained=true
+          -> 单文件自包含，目标机无需装运行时（约 150MB）
+  -->
+
+</Project>

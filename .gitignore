@@ -1,0 +1,11 @@
+# 构建产物
+bin/
+obj/
+dist/
+
+# 本地化 dotnet 环境（build.ps1 会创建）
+.dotnet-home/
+.nuget-packages/
+
+# 测试/临时残留（本仓库约定：下划线开头都是临时文件）
+_*
