@@ -23,13 +23,24 @@ SeeowKiller 常驻在你的电脑上，一旦发现屏幕上出现了那块锁�
 
 ### 第 1 步：拿到程序
 
+**方式 A：直接下载（推荐）**
+
+去 [Releases](https://github.com/GETESy1/Seeow-Manager-Killer/releases/latest) 下载：
+
+| 文件 | 说明 |
+| --- | --- |
+| `SeeowKiller-…-win-x64-selfcontained.zip` | **推荐**：单文件、免安装 .NET，解压双击即用 |
+| `SeeowKiller-…-win-x64-framework-dependent.zip` | 体积小；需要先装 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |
+
+**方式 B：自己编译（源码可审）**
+
 ```powershell
-git clone <本仓库地址>
-cd SeeowKiller
+git clone https://github.com/GETESy1/Seeow-Manager-Killer.git
+cd Seeow-Manager-Killer
 powershell -ExecutionPolicy Bypass -File .\build.ps1 -Publish
 ```
 
-产物在 `dist\SeeowKiller.exe`。做了自包含单文件版（目标机免装 .NET 运行时）见 [从源码构建](#从源码构建)。
+产物在 `dist\SeeowKiller.exe`。想做免装运行时的单文件版见 [从源码构建](#从源码构建)。
 
 ### 第 2 步：先试一下（不改任何系统设置）
 
