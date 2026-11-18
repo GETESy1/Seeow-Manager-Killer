@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Windows.Forms;
 
 namespace SeeowKiller;
 
@@ -70,7 +69,7 @@ internal static class SingleInstance
 
 internal static class Program
 {
-    private const string Version = "1.0.0";
+    internal const string Version = "1.1.0";
 
     [STAThread]
     private static int Main(string[] args)
@@ -89,6 +88,7 @@ internal static class Program
                 return 0;
             case RunMode.Status:
                 Log.Init(cfg.LogPath);
+                if (cfg.SaveRequested) cfg.Save();
                 return CmdStatus(cfg);
             case RunMode.Once:
                 Log.Init(cfg.LogPath);
@@ -121,9 +121,13 @@ internal static class Program
                 return CmdInterceptOnce(cfg);
             case RunMode.SelfTest:
                 return CmdSelfTest(cfg);
+            case RunMode.Settings:
+                // 落到下面：托盘照常跑，另外把 WinUI 设置窗口弹出来
+                Log.Init(cfg.LogPath);
+                break;
         }
 
-        // 默认：托盘 + 看门狗
+        // 默认：托盘 + 看门狗（--settings 会额外打开 WinUI 主界面）
         Log.Init(cfg.LogPath);
         cfg.SaveIfMissing();
         if (cfg.SaveRequested) cfg.Save();
@@ -137,22 +141,16 @@ internal static class Program
 
         if (!SingleInstance.Acquire())
         {
-            Console.WriteLine("SeeowKiller 已经在运行了。");
-            Log.Warn("已有实例在运行，本实例退出");
+            Console.WriteLine("SeeowKiller 已经在运行了，正在打开设置窗口。");
+            Log.Warn("已有实例在运行，请它把设置窗口弹出来");
+            TrayHost.SignalShowSettings();
             return 0;
         }
 
         if (Elevation.EnableDebugPrivilege())
             Log.Info("已启用 SeDebugPrivilege");
 
-        Application.EnableVisualStyles();
-        Application.SetCompatibleTextRenderingDefault(false);
-        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
-        Application.ThreadException += (_, e) => Log.Error($"界面线程异常: {e.Exception}");
-
-        using var app = new TrayApp(cfg);
-        Application.Run(app);
-        return 0;
+        return WinUiBootstrap.Run(cfg, showSettings: cfg.Mode == RunMode.Settings);
     }
 
     /// <summary>不满足权限时尝试提权重启自己（提权失败则继续跑）。</summary>
@@ -484,6 +482,15 @@ internal static class Program
         _ => "kill —— 无差别反复结束目标进程",
     };
 
+    private static string DescribeIcon(AppConfig cfg) => cfg.IconStyle switch
+    {
+        TrayIconStyle.Transparent => "transparent —— 透明（托盘里看不见，右键仍可用）",
+        TrayIconStyle.Custom => File.Exists(cfg.TrayIconPath)
+            ? $"custom —— {cfg.TrayIconPath}"
+            : $"custom —— {cfg.TrayIconPath}（文件不存在，会退回内置图标）",
+        _ => "default —— 内置红圆叉",
+    };
+
     private static int CmdPrintTaskXml()
     {
         var exe = Environment.ProcessPath ?? "";
@@ -507,6 +514,8 @@ internal static class Program
         Console.WriteLine($"  拦截策略   : {DescribePolicy(cfg)}");
         Console.WriteLine($"  锁屏判据   : 标题=\"{cfg.LockTitle}\" 类名含\"{cfg.LockClass}\" 进程含\"{cfg.LockProcess}\"");
         Console.WriteLine($"  命中动作   : {(cfg.HideInsteadOfKill ? "hide（先隐藏，失败才杀进程）" : "kill（直接结束进程）")}");
+        Console.WriteLine($"  桌面通知   : {(cfg.Notifications ? "开（气泡提示）" : "关（只写日志）")}");
+        Console.WriteLine($"  托盘图标   : {DescribeIcon(cfg)}");
         Console.WriteLine($"  轮询间隔   : {cfg.IntervalMs} ms");
         Console.WriteLine($"  日志文件   : {Log.Path}");
         Console.WriteLine($"  配置文件   : {AppConfig.ConfigPath}");
@@ -590,6 +599,15 @@ SeeowKiller v{Version} —— 持续结束希沃管家（SeewoServiceAssistant.e
   --uninstall                删除计划任务 + Run 键 + 撤销硬拦截（一键全清）
   --uninstall-run            只删 Run 键项
   --print-task-xml           打印将写入的计划任务 XML（排错/审计用）
+
+主界面 / 外观:
+  --settings                 打开 WinUI 设置窗口（程序已在运行时再运行一次，也会打开它）
+  --notifications on|off     是否弹桌面通知（气泡），默认 on
+  --tray-icon default|transparent|custom
+                             托盘图标：内置红圆叉 / 全透明 / 自定义 .ico
+  --tray-icon-path="C:\x.ico"
+                             用这个 .ico 当托盘图标（等价于 --tray-icon custom）
+                             （以上几项加 --save 可写进配置文件）
 
 微调:
   --interval=500             轮询间隔毫秒（50~60000，默认 500）

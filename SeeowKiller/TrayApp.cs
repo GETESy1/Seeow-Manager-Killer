@@ -1,6 +1,4 @@
 using System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace SeeowKiller;
@@ -11,7 +9,6 @@ internal sealed class TrayApp : ApplicationContext
     private readonly AppConfig _cfg;
     private readonly ProcessKiller _killer;
     private readonly NotifyIcon _tray;
-    private readonly Icon _icon;
     private readonly System.Windows.Forms.Timer _uiTimer;
     private readonly ToolStripMenuItem _pauseItem;
     private readonly ToolStripMenuItem _logonTaskItem;
@@ -19,6 +16,11 @@ internal sealed class TrayApp : ApplicationContext
     private readonly ToolStripMenuItem _ifeoItem;
     private readonly ToolStripMenuItem _aclItem;
     private readonly CancellationTokenSource _cts = new();
+
+    /// <summary>给别的线程（WinUI 设置窗口）往托盘线程投递操作的“邮筒”。</summary>
+    private readonly Control _invoker = new();
+
+    private Icon _icon;
 
     private volatile bool _paused;
     private long _lastRoundKilled;
@@ -70,7 +72,7 @@ internal sealed class TrayApp : ApplicationContext
     {
         _cfg = cfg;
         _killer = new ProcessKiller(cfg);
-        _icon = CreateIcon();
+        _icon = TrayIconFactory.Create(_cfg);
 
         var menu = new ContextMenuStrip();
 
@@ -80,7 +82,9 @@ internal sealed class TrayApp : ApplicationContext
         _ifeoItem = new ToolStripMenuItem("硬拦截：禁止启动（IFEO）", null, (_, _) => ToggleIfeo());
         _aclItem = new ToolStripMenuItem("硬拦截：禁止执行（ACL）", null, (_, _) => ToggleAcl());
 
+        menu.Items.Add(new ToolStripMenuItem("打开设置…", null, (_, _) => TrayHost.OpenSettings()));
         menu.Items.Add(new ToolStripMenuItem("立即结束一次", null, (_, _) => KillNow()));
+        menu.Items.Add(new ToolStripMenuItem("查看状态…", null, (_, _) => ShowStatusBalloon()));
         menu.Items.Add(_pauseItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_ifeoItem);
@@ -101,7 +105,7 @@ internal sealed class TrayApp : ApplicationContext
             Visible = true,
             ContextMenuStrip = menu,
         };
-        _tray.DoubleClick += (_, _) => ShowStatusBalloon();
+        _tray.DoubleClick += (_, _) => TrayHost.OpenSettings();
 
         RefreshCheckStates();
         UpdateTooltip();
@@ -119,12 +123,14 @@ internal sealed class TrayApp : ApplicationContext
             RefreshCheckStates();
         });
 
-        _tray.ShowBalloonTip(3000, "SeeowKiller 已启动",
+        Notify(3000, "SeeowKiller 已启动",
             _cfg.PolicyKind == InterceptPolicy.Lock
                 ? $"锁屏触发模式：只在检测到「{_cfg.LockTitle}」锁屏窗口时动手"
                 : $"看门狗模式：持续结束 {string.Join(", ", _cfg.Targets)}",
             ToolTipIcon.Info);
         Log.Info($"已启动：策略={_cfg.PolicyKind}，目标=[{string.Join(", ", _cfg.Targets)}]，间隔={_cfg.IntervalMs}ms，管理员={Elevation.IsAdmin}");
+        Log.Info($"外观：通知={(_cfg.Notifications ? "开" : "关")}，托盘图标={_cfg.TrayIconMode}" +
+                 (_cfg.IconStyle == TrayIconStyle.Custom ? $"（{_cfg.TrayIconPath}）" : ""));
         if (_cfg.PolicyKind == InterceptPolicy.Lock)
             Log.Info($"锁屏判据：标题=\"{_cfg.LockTitle}\" 且 类名含\"{_cfg.LockClass}\" 且 进程含\"{_cfg.LockProcess}\" 且 置顶全屏；动作={(_cfg.HideInsteadOfKill ? "hide（失败则杀进程）" : "kill")}");
     }
@@ -264,7 +270,7 @@ internal sealed class TrayApp : ApplicationContext
         try
         {
             int n = _killer.KillOnce();
-            _tray.ShowBalloonTip(2000, "SeeowKiller", n > 0 ? $"已结束 {n} 个进程" : "当前没有发现目标进程", ToolTipIcon.Info);
+            Notify(2000, "SeeowKiller", n > 0 ? $"已结束 {n} 个进程" : "当前没有发现目标进程", ToolTipIcon.Info);
         }
         catch (Exception ex)
         {
@@ -293,7 +299,7 @@ internal sealed class TrayApp : ApplicationContext
 
         Log.Write(ok ? "INFO " : "ERROR", message);
         RefreshCheckStates();
-        _tray.ShowBalloonTip(3000, "SeeowKiller 自启设置", message, ok ? ToolTipIcon.Info : ToolTipIcon.Warning);
+        Notify(3000, "SeeowKiller 自启设置", message, ok ? ToolTipIcon.Info : ToolTipIcon.Warning);
     }
 
     private void ToggleBootTask()
@@ -309,7 +315,7 @@ internal sealed class TrayApp : ApplicationContext
 
         Log.Write(ok ? "INFO " : "ERROR", message);
         RefreshCheckStates();
-        _tray.ShowBalloonTip(3000, "SeeowKiller 自启设置", message, ok ? ToolTipIcon.Info : ToolTipIcon.Warning);
+        Notify(3000, "SeeowKiller 自启设置", message, ok ? ToolTipIcon.Info : ToolTipIcon.Warning);
     }
 
     /// <summary>托盘里开关 IFEO 硬拦截。</summary>
@@ -331,14 +337,14 @@ internal sealed class TrayApp : ApplicationContext
 
         Log.Write(ok ? "INFO " : "ERROR", $"{(on ? "开启" : "关闭")} IFEO 硬拦截: " + string.Join(" | ", messages));
         RefreshCheckStates();
-        _tray.ShowBalloonTip(4000, on ? "已开启硬拦截（禁止启动）" : "已关闭硬拦截",
+        Notify(4000, on ? "已开启硬拦截（禁止启动）" : "已关闭硬拦截",
             string.Join("\n", messages), ok ? ToolTipIcon.Info : ToolTipIcon.Warning);
     }
 
     /// <summary>托盘里开关 ACL 层（路径探测比较费时，丢到线程池里做）。</summary>
     private void ToggleAcl()
     {
-        _tray.ShowBalloonTip(2000, "SeeowKiller", "正在处理 ACL，请稍候…", ToolTipIcon.Info);
+        Notify(2000, "SeeowKiller", "正在处理 ACL，请稍候…", ToolTipIcon.Info);
         Task.Run(() =>
         {
             try
@@ -348,7 +354,7 @@ internal sealed class TrayApp : ApplicationContext
                 if (paths.Count == 0)
                 {
                     Log.Warn("ACL: 没探测到目标 exe 路径，未做任何修改");
-                    _tray.ShowBalloonTip(4000, "未找到目标 exe", "可用配置文件里的 BlockPaths 手动指定路径后重试。", ToolTipIcon.Warning);
+                    Notify(4000, "未找到目标 exe", "可用配置文件里的 BlockPaths 手动指定路径后重试。", ToolTipIcon.Warning);
                     return;
                 }
 
@@ -366,7 +372,7 @@ internal sealed class TrayApp : ApplicationContext
                 }
 
                 RefreshCheckStates();
-                _tray.ShowBalloonTip(4000, anyDenied ? "已恢复可执行" : "已禁止执行",
+                Notify(4000, anyDenied ? "已恢复可执行" : "已禁止执行",
                     string.Join("\n", lines), allOk ? ToolTipIcon.Info : ToolTipIcon.Warning);
             }
             catch (Exception ex)
@@ -409,6 +415,20 @@ internal sealed class TrayApp : ApplicationContext
         _tray.Text = text.Length > 63 ? text[..63] : text;
     }
 
+    /// <summary>统一的气泡通知出口：用户在设置里关掉通知就静默跳过。</summary>
+    private void Notify(int timeout, string title, string body, ToolTipIcon icon = ToolTipIcon.Info)
+    {
+        if (!_cfg.Notifications) return;
+        try
+        {
+            _tray.ShowBalloonTip(timeout, title, body, icon);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"气泡通知失败: {ex.Message}");
+        }
+    }
+
     private void ShowStatusBalloon()
     {
         string body;
@@ -430,7 +450,7 @@ internal sealed class TrayApp : ApplicationContext
                    $"累计结束 {_killer.TotalKilled} 次\n{last}\n日志：{Log.Path}";
         }
 
-        _tray.ShowBalloonTip(4000, _paused ? "SeeowKiller 已暂停" : "SeeowKiller 运行中", body, ToolTipIcon.Info);
+        Notify(4000, _paused ? "SeeowKiller 已暂停" : "SeeowKiller 运行中", body, ToolTipIcon.Info);
     }
 
     private static void OpenPath(string? path)
@@ -456,8 +476,102 @@ internal sealed class TrayApp : ApplicationContext
         Log.Info("用户从托盘退出");
         _cts.Cancel();
         _tray.Visible = false;
+        TrayHost.ExitApplication();
         ExitThread();
     }
+
+    // ---- 给 WinUI 设置窗口用的跨线程入口 ----
+
+    /// <summary>把操作投递到托盘线程（WinUI 线程直接改 NotifyIcon 会炸）。</summary>
+    public void InvokeOnTray(Action action)
+    {
+        try
+        {
+            if (_invoker.InvokeRequired)
+                _invoker.BeginInvoke(action);
+            else
+                action();
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"托盘线程操作失败: {ex.Message}");
+        }
+    }
+
+    /// <summary>设置窗口保存后调用：重建图标、刷新提示与菜单勾选。</summary>
+    public void ApplyConfig()
+    {
+        InvokeOnTray(() =>
+        {
+            try
+            {
+                var newIcon = TrayIconFactory.Create(_cfg);
+                var old = _tray.Icon;
+                _tray.Icon = newIcon;
+                _icon = newIcon;
+                if (!ReferenceEquals(old, newIcon)) old?.Dispose();
+
+                RefreshCheckStates();
+                UpdateTooltip();
+                Log.Info($"设置已应用：通知={(_cfg.Notifications ? "开" : "关")}，图标={_cfg.TrayIconMode}，策略={_cfg.PolicyKind}，动作={_cfg.OnLock}");
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"应用设置失败: {ex.Message}");
+            }
+        });
+    }
+
+    public bool IsPaused => _paused;
+    public long DetectedLockCount => LockDetectedCount;
+    public long KilledCount => _killer.TotalKilled;
+    public DateTime? LastLockAt => LastLockTime;
+    public string? LastActionName => LastAction;
+
+    public void SetPaused(bool paused)
+    {
+        InvokeOnTray(() =>
+        {
+            if (_paused == paused) return;
+            TogglePause();
+        });
+    }
+
+    /// <summary>立刻按开/关切换自启（设置窗口用）。返回是否成功。</summary>
+    public bool SetLogonTask(bool enable)
+    {
+        var done = false;
+        InvokeOnTray(() =>
+        {
+            var exe = Environment.ProcessPath ?? "";
+            string message;
+            done = enable
+                ? AutoStartManager.CreateLogonTask(exe, out message)
+                : AutoStartManager.DeleteTask(AutoStartManager.LogonTaskName, out message);
+            Log.Write(done ? "INFO " : "ERROR", message);
+            RefreshCheckStates();
+        });
+        return done;
+    }
+
+    public bool SetBootTask(bool enable)
+    {
+        var done = false;
+        InvokeOnTray(() =>
+        {
+            var exe = Environment.ProcessPath ?? "";
+            string message;
+            done = enable
+                ? AutoStartManager.CreateBootTask(exe, out message)
+                : AutoStartManager.DeleteTask(AutoStartManager.BootTaskName, out message);
+            Log.Write(done ? "INFO " : "ERROR", message);
+            RefreshCheckStates();
+        });
+        return done;
+    }
+
+    public bool LogonTaskInstalled => AutoStartManager.TaskExists(AutoStartManager.LogonTaskName);
+    public bool BootTaskInstalled => AutoStartManager.TaskExists(AutoStartManager.BootTaskName);
 
     protected override void Dispose(bool disposing)
     {
@@ -467,41 +581,9 @@ internal sealed class TrayApp : ApplicationContext
             _uiTimer.Dispose();
             _tray.Dispose();
             _icon.Dispose();
+            _invoker.Dispose();
             _cts.Dispose();
         }
         base.Dispose(disposing);
-    }
-
-    // ---- 运行时画一个图标，免得带二进制资源 ----
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool DestroyIcon(IntPtr handle);
-
-    private static Icon CreateIcon()
-    {
-        using var bmp = new Bitmap(32, 32);
-        using (var g = Graphics.FromImage(bmp))
-        {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.Clear(Color.Transparent);
-
-            using var bg = new SolidBrush(Color.FromArgb(230, 30, 30));
-            g.FillEllipse(bg, 1, 1, 30, 30);
-
-            using var pen = new Pen(Color.White, 5) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-            g.DrawLine(pen, 10, 10, 22, 22);
-            g.DrawLine(pen, 22, 10, 10, 22);
-        }
-
-        var h = bmp.GetHicon();
-        try
-        {
-            using var tmp = Icon.FromHandle(h);
-            return (Icon)tmp.Clone();
-        }
-        finally
-        {
-            DestroyIcon(h);
-        }
     }
 }

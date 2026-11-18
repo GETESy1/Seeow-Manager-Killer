@@ -2,37 +2,61 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <UseWindowsForms>true</UseWindowsForms>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+
+    <!-- 主界面 = WinUI 3（Windows App SDK）；托盘/看门狗还是 WinForms，两套 UI 同进程并存 -->
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <EnableMsixTooling>true</EnableMsixTooling>
+
+    <!-- 自己写 Main（要处理 status/lockscan 这类控制台模式），不要让 XAML 生成入口点 -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <AssemblyName>SeeowKiller</AssemblyName>
     <RootNamespace>SeeowKiller</RootNamespace>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <Product>SeeowKiller</Product>
-    <Description>登录/开机即结束希沃管家进程（SeewoServiceAssistant.exe）的看门狗</Description>
+    <Description>只在希沃锁屏时动手的看门狗（WinUI 3 主界面 + WinForms 托盘）</Description>
     <DebugType>embedded</DebugType>
-
-    <!-- 本机离线时的版本钉死：使用已安装的 targeting pack 8.0.29，避免 restore 去访问 nuget.org -->
-    <TargetLatestRuntimePatch>false</TargetLatestRuntimePatch>
-    <RuntimeFrameworkVersion>8.0.29</RuntimeFrameworkVersion>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      用 FrameworkReference 直接引 WinForms，而不是 <UseWindowsForms>true</UseWindowsForms>：
+      UseWindowsForms 会把 WPF 的标记编译器一起拉进来，它会把 App.xaml / *.xaml 当 WPF 页面
+      处理，直接报 MC6000。WinUI 自己也要用这些 .xaml，两边会打架。
+    -->
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.7.0" />
+  </ItemGroup>
 
   <!--
     注意：不要给这个项目加自定义 app.manifest。
-    .NET 的 apphost 自己会写入 manifest，再叠加一份会触发
-    "side-by-side configuration is incorrect"（0x36B1）导致 exe 起不来。
-    默认 manifest 已经包含 asInvoker + Win10 兼容声明，够用；
-    需要提权时程序自己用 runas 重新拉起自己。
-  -->
+    .NET 的 apphost 自己会写 manifest，再叠一份会触发 "side-by-side configuration is incorrect"。
+    WinUI 的 DPI/显示器感知由 Windows App SDK 自己处理，不需要我们在 manifest 里声明。
 
-  <!--
-    发布命令（本机离线可直接用第一条；第二条需要联网拉 runtime pack）：
-      dotnet publish -c Release
-          -> 框架依赖，体积小，目标机需装 .NET 8 Desktop Runtime
-      dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true -p:SelfContained=true
-          -> 单文件自包含，目标机无需装运行时（约 150MB）
+    发布（Windows App SDK 以“自包含”方式随程序分发，目标机无需装 Windows App Runtime）：
+      build.ps1 -Publish                         -> dist\unpacked\ 文件夹，目标机需 .NET 8 Desktop Runtime
+      build.ps1 -Publish -SingleFile             -> 单文件（不带运行时，需 .NET 8 Desktop Runtime）
+      build.ps1 -Publish -SingleFile -SelfContained  -> 单文件（连 .NET 运行时一起打包，目标机什么都不用装）
+
+    单文件为什么能成：需要 Windows App SDK 2.x。1.8 及更早版本在自包含模式下生成的
+    app.manifest 里有重名 <file> 条目，和单文件打包器注入的 dll redirector 撞车，
+    exe 一启动就 0x36B1（side-by-side configuration is incorrect），
+    这个坑只有升到 2.x 才消失。单文件必须同时给：
+      -p:PublishSingleFile=true -p:IncludeAllContentForSelfExtract=true
+    （IncludeAllContentForSelfExtract 会把 .pri / WinAppSDK 原生 DLL 一起塞进包里，首次运行解压到
+      %TEMP%\.net\SeeowKiller\...，之后走缓存启动很快。）
   -->
 
 </Project>

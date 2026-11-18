@@ -5,6 +5,8 @@
 默认只在**真的被锁屏时**才出手 —— 希沃的白板、课件、巡视等日常功能完全不受影响。
 
 - 平台：Windows 10 / 11（x64），C# / .NET 8，带托盘图标，支持开机自启
+- 主界面：**WinUI 3（Windows App SDK）**，双击托盘图标或右键「打开设置…」即可打开
+- 可关通知：托盘气泡通知能一键关掉，只留日志；托盘图标可换成**透明**或**自己的 .ico**
 - 默认策略：只在检测到锁屏窗口时解除锁屏（也可切换为"彻底不让它跑"）
 
 > ⚠️ 请只用于你**有权管理**的电脑。学校资产请先确认不违反校规，详见 [注意事项](#注意事项请务必读)。
@@ -29,18 +31,21 @@ SeeowKiller 常驻在你的电脑上，一旦发现屏幕上出现了那块锁�
 
 | 文件 | 说明 |
 | --- | --- |
-| `SeeowKiller-…-win-x64-selfcontained.zip` | **推荐**：单文件、免安装 .NET，解压双击即用 |
-| `SeeowKiller-…-win-x64-framework-dependent.zip` | 体积小；需要先装 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |
+| `SeeowKiller-…-win-x64-selfcontained.exe` | **推荐**：单文件、免装 .NET（约 310MB），双击即用 |
+| `SeeowKiller-…-win-x64-framework-dependent.exe` | 单文件、体积小（约 156MB），需要先装 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |
+
+> 单文件版首次启动会把自己解压到 `%TEMP%\.net\SeeowKiller\…`（几秒钟），之后启动就走缓存。
+> 想要更小的单文件，自己编译时加 `-Compress`（约 124MB，首次启动稍慢）。
 
 **方式 B：自己编译（源码可审）**
 
 ```powershell
 git clone https://github.com/GETESy1/Seeow-Manager-Killer.git
 cd Seeow-Manager-Killer
-powershell -ExecutionPolicy Bypass -File .\build.ps1 -Publish
+powershell -ExecutionPolicy Bypass -File .\build.ps1 -Publish -SingleFile -SelfContained
 ```
 
-产物在 `dist\SeeowKiller.exe`。想做免装运行时的单文件版见 [从源码构建](#从源码构建)。
+产物是单个 exe：`dist\SeeowKiller-<版本>-win-x64-selfcontained.exe`。
 
 ### 第 2 步：先试一下（不改任何系统设置）
 
@@ -60,6 +65,11 @@ cd dist
 装好后右下角会出现一个红色圆叉图标，右键有菜单。之后正常用电脑即可，被锁屏时会自动解除并在日志留痕。
 
 > 想先看效果又不动系统？直接运行 `.\SeeowKiller.exe`（不带参数）就是托盘模式，退出图标即结束。
+
+**主界面（WinUI 3）**：双击托盘图标，或右键 →「打开设置…」，也可以 `.\SeeowKiller.exe --settings`。
+在窗口里能关掉通知、把托盘图标换成透明/自定义、切策略、开关自启；改完立即生效并写回配置，关窗口不会退出程序。
+
+![设置窗口](docs/settings-window.png)
 
 ---
 
@@ -130,6 +140,13 @@ cd dist
 .\SeeowKiller.exe --block-path="C:\...\SeewoServiceAssistant.exe"   # 手动指定目标 exe
 .\SeeowKiller.exe --no-discover            # 只用上面指定的路径，不做自动探测
 
+# 主界面 / 外观
+.\SeeowKiller.exe --settings               # 打开 WinUI 3 设置窗口（已在运行时再跑一次也会打开它）
+.\SeeowKiller.exe --notifications off      # 关掉托盘气泡通知（只写日志）
+.\SeeowKiller.exe --tray-icon transparent  # 托盘图标换成全透明（看不见但仍能右键）
+.\SeeowKiller.exe --tray-icon-path="C:\me\my.ico"   # 用自己的 .ico（等价于 --tray-icon custom）
+.\SeeowKiller.exe --tray-icon transparent --save    # 写进配置长期生效
+
 # 其它
 .\SeeowKiller.exe --interval=300           # 扫描间隔（50~60000 毫秒，默认 500）
 .\SeeowKiller.exe --never-kill=xxx.exe     # 保险丝：永不结束这个进程（可重复给）
@@ -146,7 +163,9 @@ cd dist
 
 | 菜单项 | 作用 |
 | --- | --- |
+| 打开设置… | 打开 WinUI 3 主界面（也可以双击托盘图标） |
 | 立即结束一次 | 手动触发一次 |
+| 查看状态… | 气泡显示当前模式、累计拦截、最近一次时间 |
 | 暂停拦截 / 恢复 | 临时停手，其它设置不变 |
 | 硬拦截：禁止启动（IFEO） | 勾选即开/关，等价于 `--block on/off` |
 | 硬拦截：禁止执行（ACL） | 勾选即开/关，等价于 `--block-acl on/off` |
@@ -154,7 +173,7 @@ cd dist
 | 打开日志 / 打开配置目录 | 直接定位到文件 |
 | 退出 | 结束程序 |
 
-双击托盘图标可看当前模式、累计拦截次数、最近一次拦截时间。
+双击托盘图标 = 打开设置窗口；关掉设置窗口只是隐藏，程序继续在托盘里跑。
 
 ---
 
@@ -170,6 +189,9 @@ cd dist
   "NeverKill": [],
   "ReapplyBlock": true,
   "BlockPaths": [],
+  "Notifications": true,
+  "TrayIconMode": "default",
+  "TrayIconPath": "",
   "Policy": "lock",
   "OnLock": "kill",
   "LockTitle": "希沃管家",
@@ -188,6 +210,9 @@ cd dist
 | `NeverKill` | 保险丝名单，永不结束 |
 | `ReapplyBlock` | 是否定期把被抹掉的硬拦截重新挂上 |
 | `BlockPaths` | 硬拦截要处理的 exe 路径（自动探测不到时手填） |
+| `Notifications` | 是否弹托盘气泡通知（`false` = 只写日志，界面里也能关） |
+| `TrayIconMode` | `default`（内置红圆叉）/ `transparent`（透明）/ `custom`（自定义 .ico） |
+| `TrayIconPath` | 自定义图标的 .ico 路径，`TrayIconMode=custom` 时生效；文件不存在会自动退回内置图标 |
 
 日志：`%LOCALAPPDATA%\SeeowKiller\SeeowKiller.log`
 
@@ -263,23 +288,41 @@ cd dist
 
 ## 从源码构建
 
-需要 .NET 8 SDK（或更高）。
+需要 .NET 8 SDK（或更高）。WinUI 3 的依赖（Windows App SDK）第一次构建要从 nuget.org 拉，之后可离线。
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\build.ps1 -Publish                  # 框架依赖，产物在 dist\
-powershell -ExecutionPolicy Bypass -File .\build.ps1 -Publish -SelfContained   # 单文件自包含（约 150MB，目标机免装运行时）
+# 单文件：不带运行时（目标机需装 .NET 8 Desktop Runtime，约 156MB）
+powershell -ExecutionPolicy Bypass -File .\build.ps1 -Publish -SingleFile
+
+# 单文件：连 .NET 运行时一起打包（目标机什么都不用装，约 310MB）
+powershell -ExecutionPolicy Bypass -File .\build.ps1 -Publish -SingleFile -SelfContained
+
+# 单文件：再加压缩（约 124MB，首次启动稍慢）
+powershell -ExecutionPolicy Bypass -File .\build.ps1 -Publish -SingleFile -SelfContained -Compress
+
+# 文件夹发布（调试/排查用）
+powershell -ExecutionPolicy Bypass -File .\build.ps1 -Publish
 ```
 
-> `-SelfContained` 第一次构建需要联网下载 runtime pack；只想自己用的话，框架依赖版就够（目标机装一个
-> [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) 即可）。
+> 产物命名：`dist\SeeowKiller-<版本>-win-x64-selfcontained.exe` /
+> `dist\SeeowKiller-<版本>-win-x64-framework-dependent.exe`；文件夹发布在 `dist\unpacked\`。
+>
+> 单文件之所以可行，是因为 Windows App SDK 升到了 **2.x**：1.8 及更早版本自包含时会生成带重名
+> `<file>` 条目的 app.manifest，和单文件打包器的 dll redirector 冲突，exe 一启动就 0x36B1。
+> 单文件必须带 `PublishSingleFile` + `IncludeAllContentForSelfExtract`（build.ps1 已处理）。
 
 目录结构：
 
 ```
-SeeowKiller/             主程序（C# / .NET 8 / WinForms 托盘）
+SeeowKiller/             主程序（C# / .NET 8；WinUI 3 主界面 + WinForms 托盘）
+  App.xaml(.cs)          WinUI 3 应用壳（必须在项目根目录，否则资源 URI 会解析失败）
+  WinUiBootstrap.cs      先起托盘，再初始化 WinUI 消息循环；WinUI 挂了也能退化跑托盘
+  TrayHost.cs            WinUI 线程 ↔ 托盘线程的桥（设置窗口、单实例唤起）
+  TrayIconFactory.cs     内置 / 透明 / 自定义托盘图标
+  UI/SettingsWindow.xaml 主界面（设置窗口）
 tests/FakeLockWindow/    造一个"假锁屏窗口"，用于验证识别是否有效（默认全透明，不挡屏幕）
 build.ps1                一键 build / publish
-global.json / NuGet.config   构建环境钉版（SDK 版本、清空包源，离线可编译）
+global.json / NuGet.config   构建环境钉版（SDK 版本；包源保留 nuget.org 供 WinAppSDK 还原）
 docs/技术细节.md          原理、取证、实现与测试记录（面向开发者）
 ```
 

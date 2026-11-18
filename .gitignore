@@ -1,11 +1,14 @@
-# 构建产物
+# 鏋勫缓浜х墿
 bin/
 obj/
 dist/
 
-# 本地化 dotnet 环境（build.ps1 会创建）
+# 鏈湴鍖?dotnet 鐜锛坆uild.ps1 浼氬垱寤猴級
 .dotnet-home/
 .nuget-packages/
 
-# 测试/临时残留（本仓库约定：下划线开头都是临时文件）
+# 娴嬭瘯/涓存椂娈嬬暀锛堟湰浠撳簱绾﹀畾锛氫笅鍒掔嚎寮€澶撮兘鏄复鏃舵枃浠讹級
 _*
+
+# Visual Studio
+.vs/

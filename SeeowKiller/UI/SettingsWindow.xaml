@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="SeeowKiller.UI.SettingsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="SeeowKiller 设置">
+
+    <Grid x:Name="RootGrid" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.Resources>
+            <Style x:Key="Card" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Padding" Value="16" />
+            </Style>
+            <Style x:Key="SectionHeader" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}" />
+            <Style x:Key="Hint" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+        </Grid.Resources>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- 顶部标题 -->
+        <StackPanel Grid.Row="0" Padding="24,20,24,12" Spacing="4">
+            <TextBlock Text="SeeowKiller" Style="{StaticResource TitleTextBlockStyle}" />
+            <TextBlock x:Name="SubtitleText"
+                       Style="{StaticResource Hint}"
+                       Text="只在检测到希沃锁屏时动手；设置改完立即生效，并写回 config.json。" />
+        </StackPanel>
+
+        <!-- 主体：可滚动的设置区 -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="24,0,24,8">
+            <StackPanel Spacing="12" Padding="0,0,0,16">
+
+                <InfoBar x:Name="MessageBar"
+                         IsOpen="False"
+                         IsClosable="True"
+                         Severity="Informational"
+                         Title="提示" />
+
+                <!-- 运行状态 -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="运行状态" Style="{StaticResource SectionHeader}" />
+                        <Grid ColumnSpacing="12" RowSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="88" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Text="状态" Style="{StaticResource Hint}" />
+                            <TextBlock x:Name="StatusText" Grid.Column="1" />
+
+                            <TextBlock Text="拦截策略" Grid.Row="1" Style="{StaticResource Hint}" />
+                            <TextBlock x:Name="PolicyText" Grid.Row="1" Grid.Column="1" />
+
+                            <TextBlock Text="累计拦截" Grid.Row="2" Style="{StaticResource Hint}" />
+                            <TextBlock x:Name="CountText" Grid.Row="2" Grid.Column="1" />
+
+                            <TextBlock Text="最近动作" Grid.Row="3" Style="{StaticResource Hint}" />
+                            <TextBlock x:Name="LastActionText" Grid.Row="3" Grid.Column="1" />
+                        </Grid>
+
+                        <ToggleSwitch x:Name="PauseSwitch"
+                                      Header="暂停拦截"
+                                      OffContent="拦截中"
+                                      OnContent="已暂停"
+                                      Toggled="OnPauseToggled" />
+                    </StackPanel>
+                </Border>
+
+                <!-- 通知 -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="通知" Style="{StaticResource SectionHeader}" />
+                        <ToggleSwitch x:Name="NotificationsSwitch"
+                                      Header="显示桌面通知（气泡提示）"
+                                      OffContent="已关闭：只在日志里留痕"
+                                      OnContent="已开启：启动、拦截、设置变更都会提示"
+                                      Toggled="OnNotificationsToggled" />
+                        <TextBlock Style="{StaticResource Hint}"
+                                   Text="关闭后托盘不再弹任何气泡，拦截和日志照常工作。" />
+                    </StackPanel>
+                </Border>
+
+                <!-- 托盘图标 -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="托盘图标" Style="{StaticResource SectionHeader}" />
+
+                        <RadioButtons x:Name="IconStyleSelector" SelectionChanged="OnIconStyleChanged">
+                            <x:String>默认：红圆叉</x:String>
+                            <x:String>透明：托盘里看不见，但仍可右键</x:String>
+                            <x:String>自定义：用我自己的 .ico</x:String>
+                        </RadioButtons>
+
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border Width="52" Height="52" CornerRadius="6"
+                                    Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                                <Grid>
+                                    <!-- 预览全部用 XAML 画：WinUI 的 Image 解码在部分机器上会崩进程 -->
+                                    <Grid x:Name="PreviewDefault" Width="36" Height="36">
+                                        <Ellipse Fill="#E61E1E" />
+                                        <Path Stroke="White" StrokeThickness="4"
+                                              StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                              Data="M 11,11 L 25,25 M 25,11 L 11,25" />
+                                    </Grid>
+
+                                    <Border x:Name="PreviewTransparent" Width="36" Height="36" CornerRadius="4"
+                                            BorderThickness="1" Visibility="Collapsed"
+                                            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}">
+                                        <TextBlock Text="透明" FontSize="11"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </Border>
+
+                                    <StackPanel x:Name="PreviewCustom" Visibility="Collapsed"
+                                                HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <FontIcon Glyph="&#xE8B9;" FontSize="18" />
+                                        <TextBlock Text="自定义" FontSize="9" HorizontalAlignment="Center" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <StackPanel Grid.Column="1" Spacing="6">
+                                <Button x:Name="PickIconButton"
+                                        Content="选择 .ico 文件…"
+                                        Click="OnPickIconClick" />
+                                <TextBlock x:Name="IconPathText" Style="{StaticResource Hint}" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- 拦截策略 -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="拦截策略" Style="{StaticResource SectionHeader}" />
+                        <ComboBox x:Name="PolicyCombo"
+                                  Header="什么时候动手"
+                                  HorizontalAlignment="Stretch"
+                                  SelectionChanged="OnPolicyChanged">
+                            <ComboBoxItem Content="只在出现锁屏窗口时（推荐）" Tag="lock" />
+                            <ComboBoxItem Content="不管窗口，见到目标进程就结束" Tag="kill" />
+                        </ComboBox>
+                        <ComboBox x:Name="OnLockCombo"
+                                  Header="命中锁屏后的动作"
+                                  HorizontalAlignment="Stretch"
+                                  SelectionChanged="OnOnLockChanged">
+                            <ComboBoxItem Content="结束产生锁屏的进程" Tag="kill" />
+                            <ComboBoxItem Content="先尝试隐藏窗口（藏不住再结束）" Tag="hide" />
+                        </ComboBox>
+                    </StackPanel>
+                </Border>
+
+                <!-- 开机自启 -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="开机自启" Style="{StaticResource SectionHeader}" />
+                        <ToggleSwitch x:Name="LogonTaskSwitch"
+                                      Header="随登录启动（计划任务，静默无 UAC）"
+                                      Toggled="OnLogonTaskToggled" />
+                        <ToggleSwitch x:Name="BootTaskSwitch"
+                                      Header="随开机启动（SYSTEM，需管理员）"
+                                      Toggled="OnBootTaskToggled" />
+                        <TextBlock Style="{StaticResource Hint}"
+                                   Text="改这两项需要管理员权限；失败会弹提示，不会写坏现有自启。" />
+                    </StackPanel>
+                </Border>
+
+                <!-- 底部信息 -->
+                <StackPanel Spacing="4" Padding="2,0,0,0">
+                    <TextBlock x:Name="VersionText" Style="{StaticResource Hint}" />
+                    <TextBlock x:Name="ConfigPathText" Style="{StaticResource Hint}" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- 底栏 -->
+        <Border Grid.Row="2" BorderThickness="0,1,0,0"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                Background="{ThemeResource LayerFillColorDefaultBrush}">
+            <Grid Padding="24,12,24,16" ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Button Content="打开日志" Click="OnOpenLogClick" />
+                <TextBlock x:Name="FooterHint" Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0"
+                           Style="{StaticResource Hint}" />
+                <Button x:Name="SaveButton" Grid.Column="2" Content="保存并应用"
+                        Style="{StaticResource AccentButtonStyle}" Click="OnSaveClick" />
+                <Button Grid.Column="3" Content="关闭" Click="OnCloseClick" />
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

@@ -17,6 +17,7 @@ internal enum RunMode
     IfeoStub,   // 作为假调试器被拉起（内部用）
     PrintTaskXml, // 打印计划任务 XML（排错用）
     SelfTest,   // 自检（解析逻辑、路径探测）
+    Settings,   // 打开 WinUI 设置窗口（主界面）
     Help,       // 帮助
 }
 
@@ -26,6 +27,19 @@ internal enum ToggleAction
     On,
     Off,
     Status,
+}
+
+/// <summary>托盘图标样式。</summary>
+internal enum TrayIconStyle
+{
+    /// <summary>内置的红圆叉图标。</summary>
+    Default,
+
+    /// <summary>全透明图标（托盘里看不见，但仍能右键操作）。</summary>
+    Transparent,
+
+    /// <summary>用户自选的 .ico 文件。</summary>
+    Custom,
 }
 
 /// <summary>拦截策略。</summary>
@@ -61,6 +75,17 @@ internal sealed class AppConfig
     /// <summary>硬拦截（ACL）时使用的额外文件路径（自动探测不到时手填）。</summary>
     public List<string> BlockPaths { get; set; } = new();
 
+    // ---- 外观 / 通知 ----
+
+    /// <summary>是否弹托盘气泡通知（关掉后托盘不再打扰，只写日志）。</summary>
+    public bool Notifications { get; set; } = true;
+
+    /// <summary>托盘图标样式：default（内置红圆叉）/ transparent（全透明）/ custom（自定义 .ico）。</summary>
+    public string TrayIconMode { get; set; } = "default";
+
+    /// <summary>自定义托盘图标的 .ico 路径（TrayIconMode = custom 时生效）。</summary>
+    public string TrayIconPath { get; set; } = "";
+
     // ---- 锁屏触发拦截 ----
 
     /// <summary>拦截策略：lock（默认，只在检测到锁屏时动手）/ kill（无差别结束目标进程）。</summary>
@@ -89,6 +114,8 @@ internal sealed class AppConfig
 
     [JsonIgnore] public InterceptPolicy PolicyKind => ParsePolicy(Policy);
 
+    [JsonIgnore] public TrayIconStyle IconStyle => ParseIconStyle(TrayIconMode);
+
     [JsonIgnore] public bool HideInsteadOfKill =>
         OnLock.Trim().Equals("hide", StringComparison.OrdinalIgnoreCase);
 
@@ -96,6 +123,21 @@ internal sealed class AppConfig
     {
         "kill" or "killall" or "watch" or "all" or "process" => InterceptPolicy.KillAll,
         _ => InterceptPolicy.Lock,
+    };
+
+    /// <summary>解析托盘图标样式（也接受 none/blank/hidden 等写法）。</summary>
+    public static TrayIconStyle ParseIconStyle(string? value) => (value ?? "default").Trim().Trim('"').ToLowerInvariant() switch
+    {
+        "transparent" or "none" or "blank" or "invisible" or "hidden" or "clear" => TrayIconStyle.Transparent,
+        "custom" or "file" or "icon" or "path" or "image" => TrayIconStyle.Custom,
+        _ => TrayIconStyle.Default,
+    };
+
+    public static string IconStyleName(TrayIconStyle style) => style switch
+    {
+        TrayIconStyle.Transparent => "transparent",
+        TrayIconStyle.Custom => "custom",
+        _ => "default",
     };
 
     [JsonIgnore] public static string DataDir { get; } = System.IO.Path.Combine(
@@ -219,6 +261,24 @@ internal sealed class AppConfig
                 case "--no-elevate":
                     cfg.NoElevate = true;
                     break;
+                case "--settings":
+                case "--ui":
+                    cfg.Mode = RunMode.Settings;
+                    break;
+                case "--notifications":
+                    cfg.Notifications = ParseToggle(Value()) != ToggleAction.Off;
+                    break;
+                case "--tray-icon":
+                    cfg.TrayIconMode = (Value() ?? "default").Trim().ToLowerInvariant();
+                    break;
+                case "--tray-icon-path":
+                    var iconPath = Value();
+                    if (!string.IsNullOrWhiteSpace(iconPath))
+                    {
+                        cfg.TrayIconPath = iconPath.Trim('"');
+                        cfg.TrayIconMode = "custom";
+                    }
+                    break;
                 case "--interval":
                 case "--intervalms":
                     if (int.TryParse(Value(), out var ms)) cfg.IntervalMs = Math.Clamp(ms, 50, 60000);
@@ -271,6 +331,7 @@ internal sealed class AppConfig
                 {
                     if (loaded.Targets.Count == 0) loaded.Targets = new() { "SeewoServiceAssistant.exe" };
                     loaded.IntervalMs = Math.Clamp(loaded.IntervalMs, 50, 60000);
+                    loaded.Normalize();
                     return loaded;
                 }
             }
@@ -281,6 +342,19 @@ internal sealed class AppConfig
         }
 
         return new AppConfig();
+    }
+
+    /// <summary>把外观字段规整成合法值（配置手改错、旧版本升级时用）。</summary>
+    public void Normalize()
+    {
+        var style = ParseIconStyle(TrayIconMode);
+        if (style == TrayIconStyle.Custom && string.IsNullOrWhiteSpace(TrayIconPath))
+            style = TrayIconStyle.Default;
+
+        TrayIconMode = IconStyleName(style);
+        TrayIconPath = TrayIconPath?.Trim() ?? "";
+        Policy = PolicyKind == InterceptPolicy.KillAll ? "kill" : "lock";
+        OnLock = HideInsteadOfKill ? "hide" : "kill";
     }
 
     /// <summary>首次运行时落一份默认配置，方便手改。</summary>
